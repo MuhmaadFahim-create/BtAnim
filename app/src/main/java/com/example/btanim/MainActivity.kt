@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Button
 import android.widget.LinearLayout
@@ -24,40 +25,44 @@ class MainActivity : AppCompatActivity() {
             setPadding(48, 96, 48, 48)
         }
         val info = TextView(this).apply {
-            text = "ব্লুটুথ কানেক্ট হলে অ্যানিমেশন দেখাবে।\n\"Start\" চাপুন এবং সব পারমিশন দিন।"
+            text = "\"Enable\" চাপুন এবং সব পারমিশন দিন।\nএকবার সেটআপ হলে অ্যাপ খুলে রাখতে হবে না।"
             textSize = 18f
         }
-        val start = Button(this).apply { text = "Start" }
+        val enable = Button(this).apply { text = "Enable" }
         layout.addView(info)
-        layout.addView(start)
+        layout.addView(enable)
         setContentView(layout)
 
-        start.setOnClickListener {
-            // ১) ব্লুটুথ ও নোটিফিকেশন পারমিশন
-            val missing = mutableListOf<String>()
-            if (Build.VERSION.SDK_INT >= 31 && !granted(Manifest.permission.BLUETOOTH_CONNECT))
-                missing += Manifest.permission.BLUETOOTH_CONNECT
-            if (Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS))
-                missing += Manifest.permission.POST_NOTIFICATIONS
-            if (missing.isNotEmpty()) {
-                ActivityCompat.requestPermissions(this, missing.toTypedArray(), 1)
-                info.text = "পারমিশন দিন, তারপর আবার Start চাপুন।"
+        enable.setOnClickListener {
+            if (Build.VERSION.SDK_INT >= 31 &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1
+                )
+                info.text = "পারমিশন দিন, তারপর আবার Enable চাপুন।"
                 return@setOnClickListener
             }
-            // ২) অন্য অ্যাপের ওপরে দেখানোর পারমিশন
             if (!Settings.canDrawOverlays(this)) {
                 startActivity(
                     Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
                 )
-                info.text = "সুইচ চালু করে ব্যাক করুন, তারপর আবার Start চাপুন।"
+                info.text = "সুইচ চালু করে ব্যাক করুন, তারপর আবার Enable চাপুন।"
                 return@setOnClickListener
             }
-            // ৩) সার্ভিস চালু
-            ContextCompat.startForegroundService(this, Intent(this, BtService::class.java))
-            info.text = "চালু আছে ✅ এখন ব্লুটুথ কানেক্ট করে দেখুন।"
+            val pm = getSystemService(PowerManager::class.java)
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                startActivity(
+                    Intent(
+                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:$packageName")
+                    )
+                )
+                info.text = "Allow দিন, তারপর আবার Enable চাপুন।"
+                return@setOnClickListener
+            }
+            info.text = "সব প্রস্তুত ✅ এখন ব্লুটুথ কানেক্ট করলেই অ্যানিমেশন দেখাবে।\nঅ্যাপ বন্ধ করে দিতে পারেন।"
         }
     }
-
-    private fun granted(p: String) =
-        ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
 }
